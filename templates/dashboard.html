@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard · StatementIQ</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand" style="font-size:1.15rem;">Statement<span>IQ</span></div>
+    <div>
+      <span style="color: var(--muted); font-size:0.88rem; margin-right:16px;">
+        Hi, {{ current_user.username }}
+      </span>
+      <a href="{{ url_for('logout') }}" class="btn btn-ghost">Logout</a>
+    </div>
+  </div>
+
+  <div class="page-wrap">
+    <div class="page-title">Upload a document</div>
+    <div class="page-sub">We'll OCR the file, verify it with BERT, and generate an analysis chart.</div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, msg in messages %}
+        <div class="flash {{ category }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <div class="card-grid">
+      <div class="upload-card">
+        <div class="badge">Pie Chart Output</div>
+        <h3>Payslip</h3>
+        <p>Upload a salary slip (JPG, PNG or PDF). We'll extract earnings & deductions.</p>
+        <form action="{{ url_for('upload_payslip') }}" method="POST" enctype="multipart/form-data">
+          <input type="file" name="document" accept=".jpg,.jpeg,.png,.pdf" required>
+          <button type="submit" class="btn-primary">Analyse Payslip</button>
+        </form>
+      </div>
+
+      <div class="upload-card">
+        <div class="badge">Bar Chart Output</div>
+        <h3>Bank Statement</h3>
+        <p>Upload a bank statement (JPG, PNG or PDF). We'll extract credits & debits.</p>
+        <form action="{{ url_for('upload_bankstatement') }}" method="POST" enctype="multipart/form-data">
+          <input type="file" name="document" accept=".jpg,.jpeg,.png,.pdf" required>
+          <button type="submit" class="btn-primary">Analyse Bank Statement</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

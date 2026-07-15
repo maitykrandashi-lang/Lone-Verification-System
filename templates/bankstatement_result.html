@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bank Statement Result · StatementIQ</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand" style="font-size:1.15rem;">Statement<span>IQ</span></div>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-ghost">← Back to Dashboard</a>
+  </div>
+
+  <div class="page-wrap">
+    <div class="page-title">Bank Statement Analysis</div>
+    <div class="page-sub">Verification and transaction breakdown for your uploaded statement.</div>
+
+    <div class="verify-banner {{ 'ok' if verification.is_verified else 'bad' }}">
+      {% if verification.is_verified %}
+        ✅ Verified as a genuine bank statement (confidence: {{ (verification.confidence * 100) | round(1) }}%)
+      {% else %}
+        ⚠️ {{ verification.message }} (confidence: {{ (verification.confidence * 100) | round(1) }}%)
+      {% endif %}
+    </div>
+
+    <div class="stat-row">
+      <div class="stat credit">
+        <div class="value">₹ {{ "{:,.2f}".format(parsed.total_credit) }}</div>
+        <div class="label">Total Credit</div>
+      </div>
+      <div class="stat debit">
+        <div class="value">₹ {{ "{:,.2f}".format(parsed.total_debit) }}</div>
+        <div class="label">Total Debit</div>
+      </div>
+      <div class="stat">
+        <div class="value">₹ {{ "{:,.2f}".format(parsed.closing_estimate) }}</div>
+        <div class="label">Net Movement</div>
+      </div>
+    </div>
+
+    <div class="result-grid" style="margin-top:28px;">
+      <div class="panel">
+        <h3>{{ parsed.chart_data.title }}</h3>
+        {% if parsed.found_any %}
+          <canvas id="bankBar"></canvas>
+        {% else %}
+          <p style="color: var(--muted);">Couldn't confidently extract transactions from this file.
+          Try a clearer scan, or check the raw OCR text below.</p>
+        {% endif %}
+      </div>
+
+      <div class="panel">
+        <h3>Detected Transactions</h3>
+        <table>
+          <tr><th>Date</th><th>Description</th><th>Type</th><th>Amount</th></tr>
+          {% for txn in parsed.transactions %}
+          <tr>
+            <td>{{ txn.date }}</td>
+            <td>{{ txn.description }}</td>
+            <td>{{ txn.type }}</td>
+            <td>₹ {{ "{:,.2f}".format(txn.amount) }}</td>
+          </tr>
+          {% endfor %}
+          {% if not parsed.transactions %}
+          <tr><td colspan="4" style="color: var(--muted);">No transactions detected.</td></tr>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+
+    <details style="margin-top:28px;">
+      <summary style="cursor:pointer; color: var(--muted);">View raw OCR text</summary>
+      <pre style="white-space:pre-wrap; background: var(--panel-2); padding:16px; border-radius:8px; margin-top:10px; font-size:0.82rem;">{{ raw_text }}</pre>
+    </details>
+  </div>
+
+  <script>
+    const chartData = {{ chart_data | safe }};
+    if (chartData.labels && chartData.labels.length > 0) {
+      const datasets = chartData.mode === 'category'
+        ? [{ label: 'Amount Spent', data: chartData.debit,
+             backgroundColor: ['#ef5b5b', '#f4b942', '#5b8def', '#9b6bf2', '#4dd0e1', '#ff8a65', '#3ddc97'] }]
+        : [
+            { label: 'Credit', data: chartData.credit, backgroundColor: '#3ddc97' },
+            { label: 'Debit', data: chartData.debit, backgroundColor: '#ef5b5b' }
+          ];
+
+      new Chart(document.getElementById('bankBar'), {
+        type: 'bar',
+        data: { labels: chartData.labels, datasets },
+        options: {
+          scales: {
+            x: { ticks: { color: '#8b93a8' }, grid: { color: '#2a3350' } },
+            y: { ticks: { color: '#8b93a8' }, grid: { color: '#2a3350' } }
+          },
+          plugins: { legend: { labels: { color: '#e8ebf3' } } }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
