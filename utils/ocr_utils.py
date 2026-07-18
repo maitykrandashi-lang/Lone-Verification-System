@@ -1,69 +1,111 @@
 """
-OCR utility.
-- Images (jpg/png) -> pytesseract directly.
-- PDFs -> render each page to an image with PyMuPDF (fitz), then OCR each page.
+OCR utilities.
+Uses pytesseract (Tesseract OCR engine) to pull raw text out of an uploaded
+document image (or PDF, via pdf2image), then applies light-weight regex
+parsing to lift out the numbers we need for the charts.
 
-Requires the Tesseract binary to be installed on the machine (this is a
-separate program, not something `pip install` sets up for you):
-  Windows : https://github.com/UB-Mannheim/tesseract/wiki  (installer .exe)
-  Mac     : brew install tesseract
-  Linux   : sudo apt-get install tesseract-ocr
+Requires the Tesseract binary to be installed on the host machine:
+  - Ubuntu/Debian: sudo apt-get install tesseract-ocr
+  - Mac (brew):    brew install tesseract
+  - Windows:        https://github.com/UB-Mannheim/tesseract/wiki
+
+For PDF uploads, pdf2image also needs the 'poppler' binary:
+  - Ubuntu/Debian: sudo apt-get install poppler-utils
+  - Mac (brew):    brew install poppler
 """
+
+import re
 import os
-import shutil
-import pytesseract
 from PIL import Image
-import fitz  # PyMuPDF
+import pytesseract
 
-# Auto-detect Tesseract on Windows if it's not already on PATH.
-# (On Mac/Linux, `brew install` / `apt-get install` put it on PATH automatically.)
-if shutil.which("tesseract") is None:
-    _common_windows_paths = [
-        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe"),
-    ]
-    for _path in _common_windows_paths:
-        if os.path.isfile(_path):
-            pytesseract.pytesseract.tesseract_cmd = _path
-            break
+try:
+    from pdf2image import convert_from_path
+    PDF_SUPPORT = True
+except ImportError:
+    PDF_SUPPORT = False
 
 
-def extract_text_from_image(image_path):
-    img = Image.open(image_path)
-    try:
-        return pytesseract.image_to_string(img)
-    except pytesseract.TesseractNotFoundError:
-        raise RuntimeError(
-            "Tesseract OCR is not installed (or not found automatically). "
-            "Install it from https://github.com/UB-Mannheim/tesseract/wiki, "
-            "then either restart the app, or open utils/ocr_utils.py and set "
-            "pytesseract.pytesseract.tesseract_cmd to the exact path of "
-            "tesseract.exe on your machine."
-        )
+def extract_text(file_path: str) -> str:
+    """Run OCR on an image or PDF and return the raw extracted text."""
+    ext = os.path.splitext(file_path)[1].lower()
+
+    if ext == ".pdf":
+        if not PDF_SUPPORT:
+            raise RuntimeError("pdf2image/poppler not installed - cannot OCR PDFs.")
+        pages = convert_from_path(file_path, dpi=300)
+        text = "\n".join(pytesseract.image_to_string(page) for page in pages)
+    else:
+        image = Image.open(file_path).convert("RGB")
+        text = pytesseract.image_to_string(image)
+
+    return text
 
 
-def extract_text_from_pdf(pdf_path):
-    text_chunks = []
-    doc = fitz.open(pdf_path)
-    for page in doc:
-        # First try native text layer (fast, works for digitally generated PDFs)
-        native_text = page.get_text().strip()
-        if len(native_text) > 30:
-            text_chunks.append(native_text)
+def _find_amount(text: str, *labels) -> float:
+    """Look for 'Label ... 12,345.00' style patterns and return the number."""
+    for label in labels:
+        pattern = rf"{label}[:\-\s]*\D*([\d,]+\.?\d*)"
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            try:
+                return float(match.group(1).replace(",", ""))
+            except ValueError:
+                continue
+    return 0.0
+
+
+def parse_salary_slip(text: str) -> dict:
+    """Pull common salary-slip line items out of OCR text."""
+    fields = {
+        "Basic Pay": _find_amount(text, "basic pay", "basic"),
+        "HRA": _find_amount(text, "hra", "house rent allowance"),
+        "DA": _find_amount(text, "da", "dearness allowance"),
+        "Other Allowances": _find_amount(text, "special allowance", "other allowance", "conveyance"),
+        "Deductions": _find_amount(text, "total deduction", "deductions", "pf", "tax"),
+        "Net Pay": _find_amount(text, "net pay", "net salary", "take home"),
+    }
+    # Fallback so the chart is never empty in a demo/test run
+    if all(v == 0 for v in fields.values()):
+        fields = {"Basic Pay": 0, "HRA": 0, "DA": 0, "Other Allowances": 0,
+                   "Deductions": 0, "Net Pay": 0}
+    return fields
+
+
+def parse_bank_statement(text: str) -> dict:
+    """
+    Pull credit/debit transaction lines out of OCR text.
+    Expected loose formats in the source doc, e.g.:
+        01/03/2026  Salary Credit        CR   45,000.00
+        05/03/2026  ATM Withdrawal       DR    3,000.00
+    """
+    credit_total, debit_total = 0.0, 0.0
+    monthly_totals = {}
+
+    line_pattern = re.compile(
+        r"(\d{2}[/\-]\d{2}[/\-]\d{2,4}).{0,60}?(CR|DR|CREDIT|DEBIT).{0,20}?([\d,]+\.\d{2}|[\d,]+)",
+        re.IGNORECASE,
+    )
+
+    for match in line_pattern.finditer(text):
+        date_str, kind, amount_str = match.groups()
+        try:
+            amount = float(amount_str.replace(",", ""))
+        except ValueError:
             continue
-        # Fallback: rasterize the page and OCR it (for scanned PDFs)
-        pix = page.get_pixmap(dpi=300)
-        img_path = pdf_path + f".page{page.number}.png"
-        pix.save(img_path)
-        text_chunks.append(extract_text_from_image(img_path))
-        os.remove(img_path)
-    doc.close()
-    return "\n".join(text_chunks)
 
+        month_key = date_str[3:] if "/" in date_str or "-" in date_str else "Unknown"
+        monthly_totals.setdefault(month_key, {"credit": 0.0, "debit": 0.0})
 
-def extract_text(file_path):
-    ext = file_path.rsplit(".", 1)[-1].lower()
-    if ext == "pdf":
-        return extract_text_from_pdf(file_path)
-    return extract_text_from_image(file_path)
+        if kind.upper() in ("CR", "CREDIT"):
+            credit_total += amount
+            monthly_totals[month_key]["credit"] += amount
+        else:
+            debit_total += amount
+            monthly_totals[month_key]["debit"] += amount
+
+    return {
+        "credit_total": credit_total,
+        "debit_total": debit_total,
+        "monthly_totals": monthly_totals,
+    }

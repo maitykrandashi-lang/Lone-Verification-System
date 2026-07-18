@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loan Verification Analyser — Upload</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar">
+      <div class="brand">LVA</div>
+      <div class="step active">01 — Log In</div>
+      <div class="step active">02 — Upload Document</div>
+      <div class="step">03 — Verification Result</div>
+      <a class="logout-link" href="{{ url_for('logout') }}">Log out ({{ user }})</a>
+    </div>
+
+    <div class="main">
+      <h1>Document Upload &amp; Verification</h1>
+      <div class="subtitle">OCR reads the document, BERT checks it matches the type you selected.</div>
+
+      <div class="upload-card">
+        <form method="POST" action="{{ url_for('upload') }}" enctype="multipart/form-data">
+          <label for="doc_type" style="display:block; font-size:13px; font-weight:500; color:var(--slate); margin-bottom:6px;">
+            Document Type
+          </label>
+          <select id="doc_type" name="doc_type" required>
+            <option value="Salary Slip">Salary Slip</option>
+            <option value="Bank Statement">Bank Statement</option>
+          </select>
+
+          <div class="dropzone">
+            Select the document to verify (image or PDF)
+            <br>
+            <input type="file" name="document" accept=".png,.jpg,.jpeg,.pdf" required>
+          </div>
+
+          <button type="submit" class="btn">Upload &amp; Verify</button>
+        </form>
+
+        {% if result %}
+          <div class="result-panel">
+            {% if result.error %}
+              <div class="verdict rejected">{{ result.error }}</div>
+            {% else %}
+              {% set v = result.verification %}
+              {% if v.verified %}
+                <div class="verdict verified">✓ Verified as {{ result.doc_type }}</div>
+              {% else %}
+                <div class="verdict rejected">✕ Could not verify as {{ result.doc_type }}</div>
+              {% endif %}
+
+              <div class="confidence">
+                BERT similarity to claimed type: {{ v.confidence }}
+                &nbsp;|&nbsp; model's best guess: {{ v.predicted_type }} ({{ v.best_score }})
+              </div>
+
+              {% if v.verified %}
+                <div class="charts">
+                  {% if result.charts.pie %}
+                    <img src="data:image/png;base64,{{ result.charts.pie }}" alt="Pie chart">
+                  {% endif %}
+                  {% if result.charts.bar %}
+                    <img src="data:image/png;base64,{{ result.charts.bar }}" alt="Bar chart">
+                  {% endif %}
+                </div>
+              {% endif %}
+            {% endif %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</body>
+</html>

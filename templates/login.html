@@ -2,35 +2,45 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Login · StatementIQ</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loan Verification Analyser — Login</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <div class="center-screen">
-    <div class="auth-card">
-      <div class="brand">Statement<span>IQ</span></div>
-      <div class="subtitle">Sign in to analyse your payslips & bank statements</div>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="stamp">LVA</div>
+      <h1>Loan Verification Analyser</h1>
+      <div class="eyebrow">Secure Sign In</div>
 
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for category, msg in messages %}
-          <div class="flash {{ category }}">{{ msg }}</div>
-        {% endfor %}
-      {% endwith %}
-
-      <form method="POST">
-        <label for="identifier">Username or Email</label>
-        <input type="text" id="identifier" name="identifier" required autofocus>
-
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password" required>
-
-        <button type="submit" class="btn-primary">Log In</button>
+      <form method="POST" action="{{ url_for('login') }}">
+        <div class="field">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn">Log In</button>
       </form>
 
-      <div class="link-row">
-        Don't have an account? <a href="{{ url_for('register') }}">Create one</a>
+      {% if message %}
+        <div class="message {{ message_type }}">{{ message }}</div>
+      {% endif %}
+
+      <div class="demo-hint">
+        demo credentials — admin / admin123<br>or — analyst / loan@2026
       </div>
     </div>
   </div>
+
+  {% if redirect_now %}
+  <script>
+    setTimeout(function () {
+      window.location.href = "{{ url_for('upload') }}";
+    }, 900);
+  </script>
+  {% endif %}
 </body>
 </html>
