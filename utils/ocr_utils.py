@@ -33,7 +33,12 @@ def extract_text(file_path: str) -> str:
     if ext == ".pdf":
         if not PDF_SUPPORT:
             raise RuntimeError("pdf2image/poppler not installed - cannot OCR PDFs.")
-        pages = convert_from_path(file_path, dpi=300)
+        
+        # 🟢 আপনার সঠিক Poppler bin ফোল্ডারের পাথ এখানে যুক্ত করা হলো
+        poppler_path = r"C:\Users\maity\Downloads\Release-26.02.0-0\poppler-26.02.0\Library\bin"
+        
+        # 🟢 convert_from_path এর ভেতর poppler_path প্যারামিটারটি দেওয়া হলো
+        pages = convert_from_path(file_path, dpi=300, poppler_path=poppler_path)
         text = "\n".join(pytesseract.image_to_string(page) for page in pages)
     else:
         image = Image.open(file_path).convert("RGB")
